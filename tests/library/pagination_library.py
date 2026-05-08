@@ -16,14 +16,13 @@ def test_next_page(driver, wait, base_url, login):
     """'Вперед' button should advance to page 2."""
     page = LibraryPage(driver, wait, base_url)
     page.open()
+    page.wait_for_cards()
 
-    initial_count = page.count_cards()
-    assert initial_count > 0, "No cards on page 1"
+    assert page.count_cards() > 0, "No cards on page 1"
 
     page.go_next_page()
+    page.wait_for_cards()
 
-    # URL should reflect page 2 (query param) OR cards should change
-    # Either way, the toolbar must still be present
     page.find(page._UPLOAD_BTN)
     assert page.count_cards() > 0, "No cards visible after navigating to next page"
 
@@ -32,13 +31,15 @@ def test_prev_page(driver, wait, base_url, login):
     """'Назад' button should return to the previous page."""
     page = LibraryPage(driver, wait, base_url)
     page.open()
+    page.wait_for_cards()
 
     # Navigate forward first
     page.go_next_page()
-    time.sleep(0.5)
+    page.wait_for_cards()
 
     # Now go back
     page.go_prev_page()
+    page.wait_for_cards()
 
     page.find(page._UPLOAD_BTN)
     assert page.count_cards() > 0, "No cards visible after navigating back"
@@ -48,8 +49,10 @@ def test_page_number_navigation(driver, wait, base_url, login):
     """Clicking page number '3' should load that page."""
     page = LibraryPage(driver, wait, base_url)
     page.open()
+    page.wait_for_cards()
 
     page.go_to_page(3)
+    page.wait_for_cards()
 
     page.find(page._UPLOAD_BTN)
     assert page.count_cards() > 0, "No cards visible after navigating to page 3"

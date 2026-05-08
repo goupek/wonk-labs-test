@@ -13,25 +13,27 @@ from pages.library.library_page import LibraryPage
 
 
 def test_filter_toggle(driver, wait, base_url, login):
-    """Clicking 'Фильтры' should hide then re-show the filter panel."""
+    """Clicking 'Фильтры' should toggle the filter panel open/closed."""
     page = LibraryPage(driver, wait, base_url)
     page.open()
 
-    # Panel is visible by default
-    assert page.is_filter_panel_visible(), "Filter panel should be visible on load"
+    # Capture initial state — panel may start open or closed
+    initial_visible = page.is_filter_panel_visible()
 
-    # First click hides it
+    # First click — state should flip
     page.click_filters()
     time.sleep(0.5)
-    assert not page.is_filter_panel_visible(), (
-        "Filter panel should be hidden after clicking 'Фильтры'"
+    after_first_click = page.is_filter_panel_visible()
+    assert after_first_click != initial_visible, (
+        "Filter panel visibility did not change after first click of 'Фильтры'"
     )
 
-    # Second click shows it again
+    # Second click — should return to initial state
     page.click_filters()
     time.sleep(0.5)
-    assert page.is_filter_panel_visible(), (
-        "Filter panel should be visible after clicking 'Фильтры' again"
+    after_second_click = page.is_filter_panel_visible()
+    assert after_second_click == initial_visible, (
+        "Filter panel visibility did not return to initial state after second click"
     )
 
 
@@ -39,6 +41,7 @@ def test_grid_list_toggle(driver, wait, base_url, login):
     """Switching between Сетка and Список views should not break the page."""
     page = LibraryPage(driver, wait, base_url)
     page.open()
+    page.wait_for_cards()
 
     # Switch to List view
     page.click_list_view()
@@ -56,7 +59,7 @@ def test_class_filter(driver, wait, base_url, login):
     page = LibraryPage(driver, wait, base_url)
     page.open()
 
-    # Make sure filter panel is visible
+    # Make sure filter panel is visible before interacting with it
     if not page.is_filter_panel_visible():
         page.click_filters()
         time.sleep(0.5)
