@@ -6,6 +6,9 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
+from utils.config import BASE_URL, ACCOUNT_1_USERNAME, ACCOUNT_1_PASSWORD
+from pages.login_page import LoginPage
+
 
 @pytest.fixture(scope="session")
 def driver():
@@ -25,3 +28,22 @@ def driver():
 @pytest.fixture(scope="session")
 def wait(driver):
     return WebDriverWait(driver, 15)
+
+
+@pytest.fixture(scope="session")
+def base_url():
+    return BASE_URL
+
+
+@pytest.fixture(scope="session")
+def login(driver, wait, base_url):
+    """Log in once for the entire test session."""
+    page = LoginPage(driver, wait, base_url)
+    page.open()
+    page.login(ACCOUNT_1_USERNAME, ACCOUNT_1_PASSWORD)
+
+
+@pytest.fixture(scope="session")
+def shared_state():
+    """Mutable dict for passing data between tests in the same session."""
+    return {}
