@@ -170,12 +170,28 @@ class LibraryPage(BasePage):
 
     # ── Internal helpers ───────────────────────────────────────────────────
 
+    def ensure_filter_panel_open(self):
+        """Open the filter panel if it is currently closed, then wait for it
+        to be fully animated in (comboboxes clickable)."""
+        if not self.is_filter_panel_visible():
+            self.click(self._FILTER_BTN)
+        # Wait until the CLASS combobox is actually clickable inside the panel
+        self.wait.until(EC.element_to_be_clickable(self._CLASS_SELECT))
+
     def _radix_select(self, trigger_locator, option_text: str):
-        """Open a Radix UI Select and pick an option — same pattern as KTP modal."""
+        """Open a Radix UI Select and pick an option.
+
+        Uses normalize-space(.) on the option element itself so it matches
+        whether the text sits directly in the item or inside a child span.
+        Falls back to the child-element form used by the KTP modal, covering
+        both Radix Select variants in use across the app.
+        """
         self.click(trigger_locator)
         option = self.wait.until(
             EC.element_to_be_clickable(
-                (By.XPATH, f"//*[@role='option'][.//*[normalize-space(text())='{option_text}']]")
+                (By.XPATH,
+                 f"//*[@role='option'][normalize-space(.)='{option_text}']"
+                 f" | //*[@role='option'][.//*[normalize-space(text())='{option_text}']]")
             )
         )
         js_click(self.driver, option)

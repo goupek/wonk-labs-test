@@ -59,10 +59,8 @@ def test_class_filter(driver, wait, base_url, login):
     page = LibraryPage(driver, wait, base_url)
     page.open()
 
-    # Make sure filter panel is visible before interacting with it
-    if not page.is_filter_panel_visible():
-        page.click_filters()
-        time.sleep(0.5)
+    # Open the filter panel and wait until its comboboxes are interactive
+    page.ensure_filter_panel_open()
 
     page.select_class_filter("8 класс")
     time.sleep(1)  # let the results update
