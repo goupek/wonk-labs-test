@@ -23,12 +23,36 @@ class KtpPage(BasePage):
         self.click(self._ADD_BTN)
 
     def open_by_name(self, name: str):
-        """Click a KTP in the list by its name and wait for the detail page."""
+        """Click a KTP in the list by its name and wait for the detail page.
+
+        Strategy:
+        1. Prefer an <a> tag that wraps the card (Next.js Link pattern).
+        2. Fall back to any text node containing the name, then use JS
+           .closest() to walk up to the nearest interactive ancestor so
+           React onClick / Next.js router fires correctly.
+        """
         import time as _t, re as _re
         _t.sleep(1)  # let the list re-render after modal close
-        el = self.find((By.XPATH, f"//*[contains(text(), '{name}')]"))
-        js_click(self.driver, el)
-        # Wait until the URL contains /ktp/{numeric-id} — confirms KTP detail page
+
+        # 1. Try <a> link first — covers the Next.js <Link> wrapper pattern
+        links = self.driver.find_elements(
+            By.XPATH, f"//a[contains(normalize-space(.), '{name}')]"
+        )
+        if links:
+            js_click(self.driver, links[0])
+        else:
+            # 2. Find the text node and click its nearest interactive ancestor
+            el = self.find((By.XPATH, f"//*[contains(text(), '{name}')]"))
+            self.driver.execute_script(
+                """
+                var el = arguments[0];
+                var target = el.closest('a, [role="link"], [role="button"], button') || el;
+                target.click();
+                """,
+                el,
+            )
+
+        # Wait until the URL contains /ktp/{numeric-id}
         self.wait.until(lambda d: _re.search(r'/ktp/\d+', d.current_url))
 
     def click_add_lesson(self):
