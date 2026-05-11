@@ -18,12 +18,22 @@ class LessonPlansPage(BasePage):
 
     # ── Filter panel ───────────────────────────────────────────────────────
     # Subject: plain combobox input
-    _SUBJECT_INPUT    = (By.XPATH, "//input[@role='combobox']")
-    # Difficulty: Radix Select, default "Все уровни"
-    _DIFFICULTY_SELECT = (By.XPATH, "//button[@role='combobox'][contains(., 'Все уровни')]")
+    _SUBJECT_INPUT = (By.XPATH, "//input[@role='combobox']")
+    # Difficulty: Radix Select — use label as stable anchor, not selected value
+    _DIFFICULTY_SELECT = (By.XPATH,
+        "//div[.//label[normalize-space(text())='Сложность']]//button[@role='combobox']")
 
     # ── Lesson plan cards — entire <div role="button"> is clickable ────────
     _CARDS = (By.XPATH, "//div[@role='button'][@tabindex='0'][.//h3]")
+
+    # ── Card detail MODAL (opens on card click — stays on same URL) ────────
+    # Modal container identified by the gradient "Посмотреть план урока" button
+    _MODAL_VIEW_BTN  = (By.XPATH, "//button[contains(., 'Посмотреть план урока')]")
+    _MODAL_CLOSE_BTN = (By.XPATH,
+        "//button[.//svg[contains(@class,'lucide-x')]] | "
+        "//button[@aria-label='Close']")
+    _MODAL_TITLE     = (By.XPATH,
+        "//div[contains(@class,'rounded-2xl')]//h2")
 
     def open(self):
         self.go_to("/ru/lesson-plans-library")
@@ -33,15 +43,31 @@ class LessonPlansPage(BasePage):
     def search(self, text: str):
         """Type into the search box and wait briefly for results."""
         inp = self.find(self._SEARCH_INPUT)
-        inp.clear()
+        inp.click()
+        inp.send_keys(Keys.CONTROL + "a")
         inp.send_keys(text)
         time.sleep(0.8)
 
     def clear_search(self):
+        """Clear the React-controlled search input and trigger a re-fetch.
+
+        React controlled inputs ignore element.clear() / Keys.DELETE because
+        those don't fire the synthetic onChange event.  Use the native value
+        property setter + dispatch 'input' event so React detects the change.
+        """
         inp = self.find(self._SEARCH_INPUT)
-        inp.send_keys(Keys.CONTROL + "a")
-        inp.send_keys(Keys.DELETE)
-        time.sleep(0.5)
+        self.driver.execute_script(
+            """
+            var el = arguments[0];
+            var setter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value').set;
+            setter.call(el, '');
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            """,
+            inp,
+        )
+        time.sleep(0.8)
 
     def click_filters(self):
         """Toggle the filter panel."""
@@ -60,11 +86,9 @@ class LessonPlansPage(BasePage):
     # ── Filter panel ───────────────────────────────────────────────────────
 
     def is_filter_panel_visible(self) -> bool:
-        """Check if the filter panel grid (Предмет / Сложность) is visible."""
+        """Check if the filter panel (Сложность combobox) is visible."""
         els = self.driver.find_elements(*self._DIFFICULTY_SELECT)
-        if not els:
-            return False
-        return els[0].is_displayed()
+        return bool(els) and els[0].is_displayed()
 
     def fill_subject_filter(self, text: str):
         """Type into the Предмет combobox."""
@@ -87,7 +111,7 @@ class LessonPlansPage(BasePage):
             )
         )
         js_click(self.driver, option)
-        time.sleep(0.3)
+        time.sleep(0.5)
 
     # ── Cards ──────────────────────────────────────────────────────────────
 
@@ -101,34 +125,30 @@ class LessonPlansPage(BasePage):
 
     def get_card_titles(self) -> list:
         """Return a list of all visible card title strings."""
-        cards = self.driver.find_elements(*self._CARDS)
         titles = []
-        for card in cards:
+        for card in self.driver.find_elements(*self._CARDS):
             try:
-                h3 = card.find_element(By.TAG_NAME, "h3")
-                titles.append(h3.text.strip())
+                titles.append(card.find_element(By.TAG_NAME, "h3").text.strip())
             except Exception:
                 pass
         return titles
 
     def click_first_card(self):
-        """Click the first lesson plan card and wait for detail page."""
-        import re as _re
+        """Click the first card — opens a detail MODAL (URL does not change)."""
         cards = self.wait.until(EC.presence_of_all_elements_located(self._CARDS))
         js_click(self.driver, cards[0])
-        # Detail page URL: /ru/lesson-plans-library/{id}
-        self.wait.until(
-            lambda d: _re.search(r'/lesson-plans-library/\w+', d.current_url)
-                      and d.current_url != f"{self.base_url}/ru/lesson-plans-library"
-        )
+        # Wait for the modal's "Посмотреть план урока" button to appear
+        self.wait.until(EC.presence_of_element_located(self._MODAL_VIEW_BTN))
 
-    def click_card_by_title(self, title: str):
-        """Click a card matching the given title text."""
-        import re as _re
-        locator = (By.XPATH, f"//div[@role='button'][.//h3[contains(., '{title}')]]")
-        el = self.wait.until(EC.element_to_be_clickable(locator))
-        js_click(self.driver, el)
-        self.wait.until(
-            lambda d: _re.search(r'/lesson-plans-library/\w+', d.current_url)
-                      and d.current_url != f"{self.base_url}/ru/lesson-plans-library"
-        )
+    def close_modal(self):
+        """Close the lesson plan preview modal via the X button."""
+        self.click(self._MODAL_CLOSE_BTN)
+        self.wait.until(EC.invisibility_of_element_located(self._MODAL_VIEW_BTN))
+
+    def click_view_lesson_plan(self):
+        """Click 'Посмотреть план урока' inside the modal — navigates to detail page."""
+        self.click(self._MODAL_VIEW_BTN)
+        # Wait for URL to leave the list page
+        self.wait.until(lambda d: "/lesson-plans-library/" in d.current_url
+                        and d.current_url.rstrip("/") !=
+                        f"{self.base_url}/ru/lesson-plans-library")
