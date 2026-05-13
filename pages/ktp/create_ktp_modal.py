@@ -31,8 +31,10 @@ class CreateKtpModal(BasePage):
         self._radix_select(self._QUARTER_TRIGGER, quarter)
 
     def submit(self):
+        import time as _t
         self.click(self._SUBMIT_BTN)
         self.wait_gone(self._TITLE)
+        _t.sleep(1)  # let any post-creation redirect settle
 
     # ------------------------------------------------------------------
     def _radix_select(self, trigger_locator, option_text: str):

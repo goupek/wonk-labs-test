@@ -1,3 +1,4 @@
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.support import expected_conditions as EC
 
 from utils.helpers import js_click
@@ -15,6 +16,20 @@ class BasePage:
         self.wait.until(lambda d: path in d.current_url)
 
     def click(self, locator):
+        """Click an element by locator, surviving one React re-render.
+
+        Between `wait.until(...)` returning a clickable element and the
+        actual JS click, React may re-render the subtree and invalidate
+        the reference.  Retry once if that happens.
+        """
+        for _ in range(2):
+            try:
+                el = self.wait.until(EC.element_to_be_clickable(locator))
+                js_click(self.driver, el)
+                return el
+            except StaleElementReferenceException:
+                continue
+        # Final attempt — let the exception propagate if it still fails
         el = self.wait.until(EC.element_to_be_clickable(locator))
         js_click(self.driver, el)
         return el

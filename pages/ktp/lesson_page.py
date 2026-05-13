@@ -21,9 +21,50 @@ class LessonPage(BasePage):
     # Gradient button — spans say "Generate lesson plan" / "Сгенерировать КСП" depending on locale
     _GENERATE_PLAN_BTN = (By.XPATH, _GRADIENT_BTN_XPATH)
 
+    # ── Lesson plan card (shown after generation) ──────────────────────────
+    # The card that shows "Поурочный план" with a status badge and Edit button
+    # Use contains(text(), ...) so an element with a child icon doesn't break match
+    _PLAN_READY_STATUS = (By.XPATH,
+        "//*[contains(text(),'Готово') or contains(text(),'Дайын')]")
+    _EDIT_PLAN_BTN     = (By.XPATH,
+        "//button[normalize-space(.)='Редактировать' or normalize-space(.)='Өңдеу']")
+
     def click_generate(self):
-        self.click(self._GENERATE_BTN)
-        # Wait for the first textarea to appear
+        """Click 'Сгенерировать' to open the lesson plan form.
+
+        The dev backend sometimes swallows the click and the form never
+        opens.  We give it three tries: each click is followed by a short
+        wait for the first textarea to appear; if it doesn't, we click
+        the button again.
+        """
+        import time as _t
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+
+        # If the form is already open (e.g. previous interaction left it
+        # in this state), skip the click.
+        if self.driver.find_elements(*self._LEARNING_OBJ_TA):
+            return
+
+        last_exc = None
+        for attempt in range(3):
+            try:
+                self.click(self._GENERATE_BTN)
+            except Exception as e:
+                last_exc = e
+
+            # Short wait for the form to open
+            try:
+                WebDriverWait(self.driver, 6).until(
+                    EC.presence_of_element_located(self._LEARNING_OBJ_TA)
+                )
+                return  # form opened — success
+            except Exception as e:
+                last_exc = e
+                _t.sleep(0.5)  # brief pause before retrying the click
+
+        # Final attempt — let the normal find() raise so the test gets
+        # a clear timeout message
         self.find(self._LEARNING_OBJ_TA)
 
     def fill_learning_objectives(self, text: str):
@@ -83,25 +124,51 @@ class LessonPage(BasePage):
             except Exception:
                 pass  # form may already be open after refresh
 
-        # Hold the browser open for the full 5 minutes from this point
-        deadline = _t.monotonic() + 300
+        # Wait up to 5 minutes for generation to complete.
+        # Phase 1: spinner appears  (LLM latency — may be skipped if very fast)
+        # Phase 2: spinner disappears  (generation done)
+        # Return immediately once done so the caller can inspect the result.
         try:
             WebDriverWait(self.driver, 300).until(
                 lambda d: d.find_elements(
                     By.XPATH, "//*[contains(@class,'animate-spin')]"
                 )
             )
+        except Exception:
+            pass  # generation may finish before a spinner is even rendered
+
+        try:
             WebDriverWait(self.driver, 300).until(
                 lambda d: not d.find_elements(
                     By.XPATH, "//*[contains(@class,'animate-spin')]"
                 )
             )
         except Exception:
-            pass
+            pass  # if no spinner was detected, generation likely finished already
 
-        remaining = deadline - _t.monotonic()
-        if remaining > 0:
-            _t.sleep(remaining)
+        # Brief pause to let React re-render the "Готово" badge
+        _t.sleep(2)
+
+    def wait_for_plan_ready(self, timeout: int = 60):
+        """Wait until the 'Поурочный план' card shows a 'Готово' / 'Дайын' badge."""
+        import time as _t
+        deadline = _t.time() + timeout
+        while _t.time() < deadline:
+            els = self.driver.find_elements(*self._PLAN_READY_STATUS)
+            if els:
+                return
+            _t.sleep(1)
+        raise TimeoutError(
+            f"'Готово' badge not found on lesson plan card after {timeout}s"
+        )
+
+    def click_edit_lesson_plan(self):
+        """Click the 'Редактировать' / 'Өңдеу' button on the lesson plan card."""
+        url_before = self.driver.current_url
+        edit_btn = self.wait.until(EC.element_to_be_clickable(self._EDIT_PLAN_BTN))
+        js_click(self.driver, edit_btn)
+        # Wait for navigation to the lesson plan editor page
+        self.wait.until(lambda d: d.current_url != url_before)
 
     # ------------------------------------------------------------------
     def _fill(self, locator, text: str):

@@ -31,10 +31,26 @@ class LibraryPage(BasePage):
     # ── Preview modal (opened by Открыть) ──────────────────────────────────
     _PREVIEW_MODAL = (By.XPATH, "//*[@role='dialog'] | //*[contains(@class,'preview')] | //*[contains(@class,'modal')]")
 
-    # ── Pagination — uses <a> tags, not <button> ───────────────────────────
-    _PREV_BTN   = (By.XPATH, "//nav[@aria-label='pagination']//a[@aria-label='Go to previous page']")
-    _NEXT_BTN   = (By.XPATH, "//nav[@aria-label='pagination']//a[@aria-label='Go to next page']")
-    _PAGE_LINKS = (By.XPATH, "//nav[@aria-label='pagination']//a[@data-slot='pagination-link']")
+    # ── Pagination ─────────────────────────────────────────────────────────
+    # Shadcn UI uses data-slot attributes; aria-labels may be English or Russian
+    # depending on the app locale.  We match both to be robust.
+    _PAGINATION_NAV = (By.XPATH,
+        "//nav[contains(translate(@aria-label,'PAGINATION','pagination'),'pagination')"
+        "   or @role='navigation']"
+        "[.//*[@data-slot='pagination-link' or @data-slot='pagination-next'"
+        "      or @data-slot='pagination-previous']]")
+    _PREV_BTN = (By.XPATH,
+        "//*[@data-slot='pagination-previous']"
+        " | //nav//*[@aria-label='Go to previous page'"
+        "          or @aria-label='Перейти на предыдущую страницу'"
+        "          or @aria-label='Назад']")
+    _NEXT_BTN = (By.XPATH,
+        "//*[@data-slot='pagination-next']"
+        " | //nav//*[@aria-label='Go to next page'"
+        "          or @aria-label='Перейти на следующую страницу'"
+        "          or @aria-label='Вперед']")
+    _PAGE_LINKS = (By.XPATH,
+        "//*[@data-slot='pagination-link']")
 
     # ── Upload modal ───────────────────────────────────────────────────────
     _UPLOAD_MODAL_TITLE = (By.XPATH, "//*[contains(text(),'Загрузить материал') or contains(text(),'Загрузка')]")
@@ -133,25 +149,29 @@ class LibraryPage(BasePage):
 
     # ── Pagination ─────────────────────────────────────────────────────────
 
+    def has_pagination(self) -> bool:
+        """Return True if the page has a visible pagination component."""
+        els = self.driver.find_elements(*self._PAGE_LINKS)
+        return len(els) > 0
+
     def go_next_page(self):
-        """Click the 'Вперед' (Next) pagination link."""
-        el = self.wait.until(EC.element_to_be_clickable(self._NEXT_BTN))
+        """Click the Next pagination control."""
+        el = self.wait.until(EC.presence_of_element_located(self._NEXT_BTN))
         js_click(self.driver, el)
         time.sleep(1)
 
     def go_prev_page(self):
-        """Click the 'Назад' (Prev) pagination link (only when enabled)."""
-        el = self.wait.until(EC.element_to_be_clickable(self._PREV_BTN))
+        """Click the Prev pagination control."""
+        el = self.wait.until(EC.presence_of_element_located(self._PREV_BTN))
         js_click(self.driver, el)
         time.sleep(1)
 
     def go_to_page(self, page_number: int):
         """Click a numbered pagination link."""
         locator = (By.XPATH,
-                   f"//nav[@aria-label='pagination']"
-                   f"//a[@data-slot='pagination-link']"
-                   f"[normalize-space(text())='{page_number}']")
-        el = self.wait.until(EC.element_to_be_clickable(locator))
+                   f"//*[@data-slot='pagination-link']"
+                   f"[normalize-space(.)='{page_number}']")
+        el = self.wait.until(EC.presence_of_element_located(locator))
         js_click(self.driver, el)
         time.sleep(1)
 

@@ -19,9 +19,9 @@ class LessonPlansPage(BasePage):
     # ── Filter panel ───────────────────────────────────────────────────────
     # Subject: plain combobox input
     _SUBJECT_INPUT = (By.XPATH, "//input[@role='combobox']")
-    # Difficulty: Radix Select — use label as stable anchor, not selected value
+    # Difficulty: Radix Select — exclude language combobox which lives in <header>
     _DIFFICULTY_SELECT = (By.XPATH,
-        "//div[.//label[normalize-space(text())='Сложность']]//button[@role='combobox']")
+        "//button[@role='combobox'][not(ancestor::header)]")
 
     # ── Lesson plan cards — entire <div role="button"> is clickable ────────
     _CARDS = (By.XPATH, "//div[@role='button'][@tabindex='0'][.//h3]")
@@ -29,9 +29,11 @@ class LessonPlansPage(BasePage):
     # ── Card detail MODAL (opens on card click — stays on same URL) ────────
     # Modal container identified by the gradient "Посмотреть план урока" button
     _MODAL_VIEW_BTN  = (By.XPATH, "//button[contains(., 'Посмотреть план урока')]")
+    # XPath cannot traverse into SVG namespace elements (.//svg won't work),
+    # so we match by the button's own Tailwind size classes (h-8 w-8) which are
+    # unique to the modal close button.
     _MODAL_CLOSE_BTN = (By.XPATH,
-        "//button[.//svg[contains(@class,'lucide-x')]] | "
-        "//button[@aria-label='Close']")
+        "//button[contains(@class,'h-8') and contains(@class,'w-8')]")
     _MODAL_TITLE     = (By.XPATH,
         "//div[contains(@class,'rounded-2xl')]//h2")
 
@@ -103,11 +105,11 @@ class LessonPlansPage(BasePage):
         Valid values: 'Все уровни', 'Легкий', 'Средний', 'Сложный'
         """
         self.click(self._DIFFICULTY_SELECT)
+        # Radix options have tabindex="-1" and cursor-default so
+        # element_to_be_clickable can stall; presence_of is sufficient.
         option = self.wait.until(
-            EC.element_to_be_clickable(
-                (By.XPATH,
-                 f"//*[@role='option'][normalize-space(.)='{value}']"
-                 f" | //*[@role='option'][.//*[normalize-space(text())='{value}']]")
+            EC.presence_of_element_located(
+                (By.XPATH, f"//*[@role='option'][normalize-space(.)='{value}']")
             )
         )
         js_click(self.driver, option)
@@ -139,16 +141,29 @@ class LessonPlansPage(BasePage):
         js_click(self.driver, cards[0])
         # Wait for the modal's "Посмотреть план урока" button to appear
         self.wait.until(EC.presence_of_element_located(self._MODAL_VIEW_BTN))
+        # Let the modal animation complete so subsequent clicks register correctly
+        time.sleep(0.5)
 
     def close_modal(self):
         """Close the lesson plan preview modal via the X button."""
-        self.click(self._MODAL_CLOSE_BTN)
+        # Use presence_of_element_located (not element_to_be_clickable) so animated
+        # modals don't stall; js_click bypasses any overlay interception.
+        close_btn = self.find(self._MODAL_CLOSE_BTN)
+        js_click(self.driver, close_btn)
         self.wait.until(EC.invisibility_of_element_located(self._MODAL_VIEW_BTN))
 
     def click_view_lesson_plan(self):
-        """Click 'Посмотреть план урока' inside the modal — navigates to detail page."""
-        self.click(self._MODAL_VIEW_BTN)
-        # Wait for URL to leave the list page
-        self.wait.until(lambda d: "/lesson-plans-library/" in d.current_url
-                        and d.current_url.rstrip("/") !=
-                        f"{self.base_url}/ru/lesson-plans-library")
+        """Click 'Посмотреть план урока' inside the modal — navigates to detail page.
+
+        The detail page URL varies (e.g. /ru/lesson-plan-editor/<id>), so we only
+        assert that the URL changed away from the list page.
+
+        Uses find() + js_click instead of click() because the button may be clipped
+        by the modal's overflow-y-auto container, causing EC.element_to_be_clickable
+        to return False even when the button is in the DOM.  js_click scrolls it
+        into view and fires a native click that reaches the React handler.
+        """
+        url_before = self.driver.current_url
+        view_btn = self.find(self._MODAL_VIEW_BTN)
+        js_click(self.driver, view_btn)
+        self.wait.until(lambda d: d.current_url != url_before)
