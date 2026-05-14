@@ -9,17 +9,7 @@ from pages.ktp.create_ktp_modal import CreateKtpModal
 # Test data
 # ---------------------------------------------------------------------------
 KTP_LIST = [
-    # Topic names are typed into the name input (in Kazakh).
-    # Subject / Grade / Quarter are picked from dropdowns (which keep their
-    # Russian labels because the app's selectors are localised per page).
-    #
-    # NOTE on "strange names" in the KTP list view: the app displays each
-    # KTP card by its classification (Subject + Grade + Quarter), e.g.
-    # "Алгебра 8 4" — not by the topic name typed into the form.  The
-    # topic name is still stored, but the card itself shows the category.
-    # That's why `open_by_name` searches by the displayed subject/grade/
-    # quarter triplet, not by the topic title.
-
+   
     # ── Математика ──────────────────────────────────────────────────────────
     ("Тригонометрия",                "Алгебра", "8 класс",  "4 четверть"),
     ("Квадрат теңдеулер",            "Алгебра", "7 класс",  "4 четверть"),
@@ -38,7 +28,6 @@ KTP_LIST = [
     ("Жылулық құбылыстар",           "Физика",  "10 класс", "4 четверть"),
 ]
 # ---------------------------------------------------------------------------
-
 
 def test_create_ktp(driver, wait, base_url, login, shared_state):
     """Create a KTP and capture its detail URL.

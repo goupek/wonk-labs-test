@@ -144,3 +144,8 @@ def test_generate_lesson_plan(driver, wait, base_url, login, shared_state):
         f"Current URL: {driver.current_url}\n"
         f"Editor regions ({len(texts)}): {texts!r}"
     )
+
+    # Signal to downstream tests (e.g. generate_presentation) that the
+    # КСП has been successfully generated for the current lesson.
+    shared_state["lesson_plan_generated"] = True
+    shared_state["lesson_plan_url"] = driver.current_url

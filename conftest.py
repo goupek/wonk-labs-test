@@ -11,28 +11,30 @@ from pages.login_page import LoginPage
 
 
 def pytest_collection_modifyitems(items):
-    """Move chatbot/conversation tests to run after all other chatbot tests.
-
-    Conversation tests send multiple messages and leave the chatbot in a
-    'dirty' state (existing conversation loaded, no suggestion cards).
-    Running them last ensures navigate/send/suggestion-card tests always
-    see a fresh chatbot session.
+    """Enforce a deterministic test execution order across the full suite.
 
     Order within the full run:
-      1. auth
-      2. chatbot/navigate_chatbot, send_message, suggestion_cards   ← fresh state
-      3. chatbot/conversation                                        ← dirties state
-      4. ktp, lesson_plans_library, library                         ← unaffected
+      0. auth
+      1. chatbot/navigate_chatbot  – just visits the page
+      2. chatbot/suggestion_cards  – needs fresh chatbot (suggestion cards visible)
+      3. chatbot/send_message      – sends messages, dirties chatbot state
+      4. chatbot/conversation      – sends more messages, leaves chatbot dirty
+      5. ktp/*                     – create_ktp → create_lesson → generate_lesson_plan
+                                     (sequential; each step depends on the previous)
+      6. lesson_plans_library, library  – independent of ktp shared_state
+      7. presentations/*           – depends on ktp shared_state (ktp_name, lesson_topic)
     """
     def sort_key(item):
         nid = item.nodeid.replace("\\", "/")
-        # Desired execution order within chatbot tests:
-        #   navigate_chatbot  → just visits the page, doesn't send messages
-        #   suggestion_cards  → needs fresh chatbot (suggestion cards visible)
-        #   send_message      → sends messages → dirties chatbot state
-        #   conversation      → sends more messages, leaves chatbot dirty
-        #
-        # Everything else (auth, ktp, library) is independent and runs after.
+        # Desired execution order:
+        #   0  auth
+        #   1  chatbot/navigate_chatbot  – just visits, no messages
+        #   2  chatbot/suggestion_cards  – needs fresh chatbot
+        #   3  chatbot/send_message      – sends messages, dirties state
+        #   4  chatbot/conversation      – sends more messages
+        #   5  ktp/*                     – create_ktp → create_lesson → generate
+        #   6  lesson_plans_library, library  – independent
+        #   7  presentations/*           – depends on ktp shared_state
         if "auth/" in nid:
             return 0
         if "chatbot/navigate_chatbot" in nid:
@@ -43,7 +45,11 @@ def pytest_collection_modifyitems(items):
             return 3
         if "chatbot/conversation" in nid:
             return 4
-        return 5  # ktp, lesson_plans_library, library
+        if "ktp/" in nid:
+            return 5
+        if "presentations/" in nid:
+            return 7
+        return 6  # lesson_plans_library, library
 
     # Python's list.sort() is stable, so relative order within each
     # group is preserved from pytest's original collection order.
